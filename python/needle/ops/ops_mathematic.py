@@ -152,7 +152,9 @@ class Transpose(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return array_api.transpose(a, axis = self.axes)
+        if self.axes is None:
+            return array_api.swapaxes(a, -1, -2)
+        return array_api.swapaxes(a, axes = self.axes)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
@@ -224,7 +226,7 @@ class Summation(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return array_api.sum(a, axis = axes)
+        return array_api.sum(a, axis = self.axes)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
@@ -245,12 +247,7 @@ class MatMul(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        lhs, rhs = node.inputs
-        lhs_dims = len(lhs.shape)
-        rhs_dims = len(rhs.dims)
-        lhs_axes = tuple(range(lhs_dims - 2)) + (lhs_dims - 1, lhs_dims - 2)
-        rhs_axes = tuple(range(rhs_dims - 2)) + (rhs_dims - 1, rhs_dims - 2)
-        return matmul(out_grad, transpose(rhs, rhs_axes)), matmul(transpose(lhs, lhs_axes), out_grad)
+        return matmul(out_grad, transpose(node.inputs[1], (-1, -2))), matmul(transpose(node.inputs[0], (-1, -2)), out_grad)
         ### END YOUR SOLUTION
 
 
