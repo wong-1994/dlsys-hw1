@@ -33,7 +33,44 @@ def parse_mnist(image_filesname, label_filename):
                 for MNIST will contain the values 0-9.
     """
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    # Read image file
+    with gzip.open(image_filesname, "rb") as img_file:
+        img_magic, = struct.unpack(">i", img_file.read(4))
+        if img_magic != 2051:
+            raise ValueError(f"MSB format parse fail.\
+                 Expect 2051, but got {img_magic}")
+
+        n_imgs, = struct.unpack(">i", img_file.read(4))
+
+        n_rows, = struct.unpack(">i", img_file.read(4))
+        n_cols, = struct.unpack(">i", img_file.read(4))
+        if n_rows != 28 or n_cols != 28:
+            raise ValueError(f"Data format parse fail.\
+                Expect 28*28, but got {n_rows}*{n_cols}")
+
+        X = np.empty((n_imgs, n_rows * n_cols), dtype = np.float32)
+        for i in range(n_imgs):
+            for j in range(n_rows * n_cols):
+                X[i][j], = struct.unpack("B", img_file.read(1))
+        X = X / 255.0
+
+    # Read label file
+    with gzip.open(label_filename) as label_file:
+        label_magic, = struct.unpack(">i", label_file.read(4))
+        if label_magic != 2049:
+            raise ValueError(f"MSB format parse fail.\
+                Expect 2049, but got {label_magic}")
+
+        n_labels, = struct.unpack(">i", label_file.read(4))
+        if n_labels != n_imgs:
+            raise ValueError(f"Wrong number of labels.\
+                Expect {n_imgs}, but got {n_labels}")
+
+        y = np.empty(n_labels, dtype = np.uint8)
+        for i in range(n_labels):
+            y[i], = struct.unpack("B", label_file.read(1))
+        
+    return (X, y)
     ### END YOUR SOLUTION
 
 
@@ -54,7 +91,9 @@ def softmax_loss(Z, y_one_hot):
         Average softmax loss over the sample. (ndl.Tensor[np.float32])
     """
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    log_sum = ndl.log(ndl.summation(ndl.exp(Z), axes = (1,)))
+    z_y = ndl.summation(ndl.multiply(Z, y_one_hot), axes = (1,))
+    return ndl.summation(log_sum - z_y)/ Z.shape[0]
     ### END YOUR SOLUTION
 
 
@@ -83,7 +122,18 @@ def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
     """
 
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    num_examples = X.shape[0]
+    num_batches = (num_examples / batch) if (num_examples % batch == 0) else (num_examples / batch + 1)
+    for i in range(num_batches):
+        batch_start = i * batch
+        batch_end = min((i + 1) * batch, num_examples)
+        z_batch = ndl.matmul(ndl.relu(ndl.matmul(X[batch_start : batch_end], W1)), W2)
+        y_batch = y[batch_start : batch_end]
+        loss, _ = loss_err(z_batch, y_batch)
+        loss.backward()
+        W1.data = W1.data - lr * W1.grad.data
+        W2.data = W2.data - lr * W2.grad.data
+    return tuple(W1, W2)
     ### END YOUR SOLUTION
 
 

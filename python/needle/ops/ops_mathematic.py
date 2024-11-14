@@ -100,7 +100,7 @@ class PowerScalar(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        return out_grad * self.scalar * power(node.inputs[0], self.scalar-1)
+        return out_grad * self.scalar * power_scalar(node.inputs[0], self.scalar-1)
         ### END YOUR SOLUTION
 
 
@@ -119,7 +119,7 @@ class EWiseDiv(TensorOp):
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
         lhs, rhs = node.inputs
-        return out_grad / rhs, -1 * out_grad * lhs / power(rhs, 2)
+        return out_grad / rhs, -1 * out_grad * lhs / power_scalar(rhs, 2)
         ### END YOUR SOLUTION
 
 
@@ -138,7 +138,7 @@ class DivScalar(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        return out_grad / node.inputs[0]
+        return divide_scalar(out_grad, self.scalar)
         ### END YOUR SOLUTION
 
 
@@ -154,7 +154,7 @@ class Transpose(TensorOp):
         ### BEGIN YOUR SOLUTION
         if self.axes is None:
             return array_api.swapaxes(a, -1, -2)
-        return array_api.swapaxes(a, axes = self.axes)
+        return array_api.swapaxes(a, *self.axes)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
@@ -185,6 +185,24 @@ class Reshape(TensorOp):
 def reshape(a, shape):
     return Reshape(shape)(a)
 
+# ################################################################################## #
+# @ Helper Function to find which axes have been changed during braodcast.           #
+#                                                                                    #
+# Broadcast operation mathes size from last dimension.                               #
+# eg: (3, ) cannot be broadcasted to (3, 1, 1), but can be broadcasted to (1, 1, 3). #
+# So compare dims from input_node's last dim, looking for dims that don't match      #
+# (where those dims' in original array should only be 1, eg: (3, 1) to (2, 3, 3),    #
+# though we don't check this implicit conition here).                                #
+# ################################################################################## #
+def findBroadcastedAxes(original_shape, broadcast_shape):
+    num_expend_dims = len(broadcast_shape) - len(original_shape)
+    broadcasted_axes = \
+        tuple(
+            num_expend_dims + i for i, (broadcast_dim, original_dim) in enumerate(
+                zip(broadcast_shape[-len(original_shape):], original_shape)    
+            ) if broadcast_dim != original_dim
+        )
+    return tuple(range(num_expend_dims)) + broadcasted_axes
 
 class BroadcastTo(TensorOp):
     def __init__(self, shape):
@@ -196,23 +214,14 @@ class BroadcastTo(TensorOp):
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        # ################################################################################## #
-        # Broadcast operation mathes size from last dimension.                               #
-        # eg: (3, ) cannot be broadcasted to (3, 1, 1), but can be broadcasted to (1, 1, 3). #
-        # So compare dims from input_node's last dim, looking for dims that don't match      #
-        # (where those dims' in original array should only be 1, eg: (3, 1) to (2, 3, 3),    #
-        # though we don't check this implicit conition here).                                #
-        # ################################################################################## #
-        num_expend_dims = len(self.shape) - len(node.inputs[0].shape)
-        broadcasted_axes = \
-            tuple(
-                num_expend_dims + i for i, (broadcast_dim, original_dim) in enumerate(
-                    zip(self.shape[-len(node.inputs[0].shape):], node.inputs[0].shape)    
-                ) if broadcast_dim != original_dim
-            )
-        sum_axes = tuple(range(num_expend_dims)) + broadcasted_axes
-        return summation(out_grad, sum_axes)
+        # ###################################################################### #
+        # Summation will erase both expend_dims and simply broadcasted_axes.     #
+        # However, those simply broadcasted_axes should be kept to match         #
+        # input node's size.                                                     #
+        # So 'Reshape' is needed here.                                           #
+        # ###################################################################### #
+        broadcasted_axes = findBroadcastedAxes(node.inputs[0].shape, self.shape)
+        return reshape(summation(out_grad, broadcasted_axes), node.inputs[0].shape)
         ### END YOUR SOLUTION
 
 
@@ -231,7 +240,12 @@ class Summation(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        return broadcast_to(out_grad, node.inputs[0].shape)
+        # Restore the axes being erased by summation
+        extend_shape = list(node.shape)
+        if self.axes is not None:
+            for axis in self.axes:
+                extend_shape.insert(axis, 1)
+        return broadcast_to(reshape(out_grad, extend_shape), node.inputs[0].shape)
         ### END YOUR SOLUTION
 
 
@@ -247,7 +261,17 @@ class MatMul(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        return matmul(out_grad, transpose(node.inputs[1], (-1, -2))), matmul(transpose(node.inputs[0], (-1, -2)), out_grad)
+        lhs, rhs = node.inputs
+
+        grad_lhs = matmul(out_grad, transpose(rhs, (-1, -2)))
+        broadcasted_axes_lhs = findBroadcastedAxes(lhs.shape, grad_lhs.shape)
+        grad_lhs = reshape(summation(grad_lhs, axes = broadcasted_axes_lhs), lhs.shape)
+
+        grad_rhs = matmul(transpose(lhs, (-1, -2)), out_grad)
+        broadcasted_axes_rhs = findBroadcastedAxes(rhs.shape, grad_rhs.shape)
+        grad_rhs = reshape(summation(grad_rhs, axes = broadcasted_axes_rhs), rhs.shape)
+
+        return grad_lhs, grad_rhs
         ### END YOUR SOLUTION
 
 
@@ -263,7 +287,7 @@ class Negate(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise -out_grad
+        return -out_grad
         ### END YOUR SOLUTION
 
 
@@ -279,7 +303,7 @@ class Log(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        return out_grad * (1 / node.inputs[0])
+        return divide(out_grad, node.inputs[0])
         ### END YOUR SOLUTION
 
 
