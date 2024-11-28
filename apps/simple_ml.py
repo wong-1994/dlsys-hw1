@@ -123,17 +123,23 @@ def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
 
     ### BEGIN YOUR SOLUTION
     num_examples = X.shape[0]
-    num_batches = (num_examples / batch) if (num_examples % batch == 0) else (num_examples / batch + 1)
+    num_batches = (num_examples // batch) if (num_examples % batch == 0) else (num_examples // batch + 1)
     for i in range(num_batches):
         batch_start = i * batch
         batch_end = min((i + 1) * batch, num_examples)
-        z_batch = ndl.matmul(ndl.relu(ndl.matmul(X[batch_start : batch_end], W1)), W2)
+        
+        z_batch = ndl.matmul(ndl.relu(ndl.matmul(ndl.Tensor(X[batch_start : batch_end], requires_grad=False), W1)), W2)
         y_batch = y[batch_start : batch_end]
-        loss, _ = loss_err(z_batch, y_batch)
+
+        y_batch_one_hot = np.zeros((y_batch.shape[0], z_batch.shape[-1]))
+        y_batch_one_hot[np.arange(y_batch.size), y_batch] = 1
+        y_batch_ = ndl.Tensor(y_batch_one_hot)
+        loss = softmax_loss(z_batch, y_batch_)
+
         loss.backward()
         W1.data = W1.data - lr * W1.grad.data
         W2.data = W2.data - lr * W2.grad.data
-    return tuple(W1, W2)
+    return W1, W2
     ### END YOUR SOLUTION
 
 

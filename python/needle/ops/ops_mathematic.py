@@ -231,7 +231,7 @@ def broadcast_to(a, shape):
 
 class Summation(TensorOp):
     def __init__(self, axes: Optional[tuple] = None):
-        if isinstance(axes, tuple):
+        if (axes is None) or isinstance(axes, tuple):
             self.axes = axes
         elif isinstance(axes, int):
             self.axes = (axes,)
@@ -240,7 +240,7 @@ class Summation(TensorOp):
                 self.axes = tuple(axes)
             except TypeError:
                 print("Summation axes type should be able to convert to tuple.")
-                raise e
+                raise
         
 
     def compute(self, a):
@@ -345,9 +345,8 @@ class ReLU(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        gate = array_api.where(node.inputs[0].cached_data > 0, 1, 0)
-        out_grad.cached_data *= gate
-        return out_grad
+        gate = Tensor(array_api.where(node.inputs[0].cached_data > 0, 1, 0))
+        return out_grad * gate
         ### END YOUR SOLUTION
 
 
